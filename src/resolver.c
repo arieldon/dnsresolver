@@ -49,6 +49,9 @@ main(int argc, char *argv[])
             },
         };
 
+        // TODO(ariel) If `name_server` points to a IPv6 address, then use a
+        // different type. Basically, support IPv6 and maintain IPv4.
+        // Address addr = {0};
         struct in_addr addr = {0};
         if (inet_aton(name_server, &addr) == 0) {
             perror("inet_aton()");
@@ -93,6 +96,7 @@ main(int argc, char *argv[])
             if (no_match) {
                 // NOTE(ariel) The program failed to match a name server to an
                 // IP address.
+                assert(false);
                 fprintf(stderr, "error: unable to resolve domain name\n");
                 goto exit;
             }
@@ -103,6 +107,10 @@ main(int argc, char *argv[])
             fprintf(stderr, "error: unable to resolve domain name\n");
             goto exit;
         }
+
+        // TODO(ariel) Check type of record set to `name_server` and set IPv4
+        // or IPv6 accordingly.
+        ;
     }
 
 exit:

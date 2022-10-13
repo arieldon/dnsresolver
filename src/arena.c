@@ -63,14 +63,18 @@ alloc:
 void *
 arena_realloc(Arena *arena, size_t size)
 {
-    assert(arena->prev + size <= arena->cap);
     assert(((uintptr_t)arena->buf + (uintptr_t)arena->prev) % MEMORY_ALIGNMENT == 0);
 
+alloc:
     if (arena->prev + size <= arena->cap) {
         arena->curr = arena->prev + size;
 
         void *p = &arena->buf[arena->prev];
         return p;
+    } else {
+        arena->cap += KB(4);
+        if (mprotect(arena->buf, arena->cap, PROT_READ | PROT_WRITE) == -1) abort();
+        goto alloc;
     }
 
     return 0;

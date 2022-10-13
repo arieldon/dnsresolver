@@ -15,6 +15,14 @@ enum {
 };
 
 typedef struct {
+    enum { IPv4, IPv6 } type;
+    union {
+        struct in_addr ipv4;
+        struct in6_addr ipv6;
+    } ip;
+} Address;
+
+typedef struct {
     String name;
     u16 type;
     u16 class;

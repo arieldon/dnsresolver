@@ -71,9 +71,10 @@ string_split(String s, u8 delim)
             } else {
                 ls.total_len -= ls.tail->string.len;
                 ls.tail->string.len = i - prev_split - 1;
+                ls.total_len += ls.tail->string.len;
+
                 ls.tail->next = n;
                 ls.tail = n;
-                ls.total_len += ls.tail->string.len;
             }
 
             prev_split = i;

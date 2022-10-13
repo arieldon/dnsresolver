@@ -13,15 +13,18 @@
 #define SERIALIZE_U8(i) \
     do { \
         assert(sizeof(i) == sizeof(u8)); \
+        if (cur + sizeof(i) >= buf + UDP_MSG_LIMIT) abort(); \
         *cur++ = i; \
     } while (0);
 #define SERIALIZE_U16(i) \
     do { \
         assert(sizeof(i) == sizeof(u16)); \
+        if (cur + sizeof(i) >= buf + UDP_MSG_LIMIT) abort(); \
         *cur++ = i >> 8; *cur++ = i; \
     } while (0);
 #define SERIALIZE_STR(s) \
     do { \
+        if (cur + s.len >= buf + UDP_MSG_LIMIT) abort(); \
         memcpy(cur, s.str, s.len); \
         cur += label.len; \
     } while (0);
@@ -39,23 +42,29 @@
 #define DESERIALIZE_U16(i) \
     do { \
         assert(sizeof(i) == sizeof(u16)); \
-        i = ntohs(*(uint16_t *)cur); \
+        memcpy(&i, cur, sizeof(i)); \
+        i = ntohs(i); \
         cur += sizeof(u16); \
     } while (0);
 #define DESERIALIZE_I32(i) \
     do { \
         assert(sizeof(i) == sizeof(i32)); \
-        i = ntohl(*(i32 *)cur); \
+        memcpy(&i, cur, sizeof(i)); \
+        i = ntohl(i); \
         cur += sizeof(i32); \
     } while(0);
+#define DESERIALIZE_DOMAIN(s) \
+    do { \
+        cur += parse_domain(&s, buf, cur); \
+    } while (0);
 
 
 typedef enum { RR_CLASS_IN = 1 } RR_Class;
 
 typedef enum {
-    RR_TYPE_A    = 1,
-    RR_TYPE_NS   = 2,
-    RR_TYPE_AAAA = 28,
+    RR_TYPE_A     = 1,
+    RR_TYPE_NS    = 2,
+    RR_TYPE_AAAA  = 28,
 } RR_Type;
 
 
@@ -114,22 +123,12 @@ format_query(DNS_Query query, u8 *buf)
     }
 
 
-    /* ---
-     * TODO(ariel) Serialize the remainder of the query.
-     * ---
-     */
-    {
-    }
-
-
     return cur - buf;
 }
 
 void
 send_query(DNS_Query query, int sockfd, struct sockaddr_in sa)
 {
-    // FIXME(ariel) Ensure cursor remains in buffer. In essence, prevent buffer
-    // overflows -- likely the best suited for the macros.
     u8 buf[UDP_MSG_LIMIT] = {0};
 
     size_t len = format_query(query, (u8 *)buf);
@@ -177,13 +176,14 @@ parse_ipv6_addr(u8 *cur)
     return addr;
 }
 
-internal String
-parse_domain(u8 *buf, u8 **master_cur)
+internal size_t
+parse_domain(String *domain, String buf, u8 *cur)
 {
+    u8 *checkpoint = cur;
+
     u8 pointer_mask = 0xc0;
     String_List labels = {0};
 
-    u8 *cur = *master_cur;
     for (;;) {
         u8 len = 0;
         DESERIALIZE_U8(len);
@@ -196,34 +196,35 @@ parse_domain(u8 *buf, u8 **master_cur)
             DESERIALIZE_U16(offset);
             offset &= ~(pointer_mask << 8);
 
-            u8 *prev_cur = cur;
-            cur = buf + offset;
-            String domain = parse_domain(buf, &cur);
-            push_string(&labels, domain);
-            cur = prev_cur;
+            // NOTE(ariel) Ensure cursor remains within bounds.
+            if (cur < buf.str || cur > buf.str + buf.len) abort();
+
+            (void)parse_domain(domain, buf, buf.str + offset);
+            push_string(&labels, *domain);
+
             break;
+        } else {
+            String_Node *label = arena_alloc(&g_arena, sizeof(String_Node));
+            label->string.str = cur;
+            label->string.len = len;
+            push_string_node(&labels, label);
+            cur += len;
         }
-
-        String_Node *label = arena_alloc(&g_arena, sizeof(String_Node));
-        label->string.str = cur;
-        label->string.len = len;
-        push_string_node(&labels, label);
-        cur += len;
     }
-    *master_cur = cur;
 
-    return string_list_join(labels, '.');
+    *domain = string_list_join(labels, '.');
+    return cur - checkpoint;
 }
 
 internal size_t
-parse_resource_record(Resource_Record_Link **rrs, u8 *buf, u8 *cur)
+parse_resource_record(Resource_Record_Link **rrs, String buf, u8 *cur)
 {
     u8 *checkpoint = cur;
 
     Resource_Record_Link *link = arena_alloc(&g_arena, sizeof(Resource_Record));
     Resource_Record *rr = &link->rr;
 
-    rr->name = parse_domain(buf, &cur);
+    DESERIALIZE_DOMAIN(rr->name);
     DESERIALIZE_U16(rr->type);
     DESERIALIZE_U16(rr->class); assert(rr->class == RR_CLASS_IN);
     DESERIALIZE_I32(rr->ttl);
@@ -232,6 +233,8 @@ parse_resource_record(Resource_Record_Link **rrs, u8 *buf, u8 *cur)
 
     /* ---
      * Parse rdata field.
+     *
+     * TODO(ariel) Parse CNAME resource records.
      * ---
      */
     switch (rr->type) {
@@ -244,7 +247,8 @@ parse_resource_record(Resource_Record_Link **rrs, u8 *buf, u8 *cur)
             break;
         }
         case RR_TYPE_NS: {
-            String name = parse_domain(buf, &cur);
+            String name = {0};
+            cur += parse_domain(&name, buf, cur);
             rr->rdlength = name.len;
             rr->rdata = name.str;
             break;
@@ -257,7 +261,10 @@ parse_resource_record(Resource_Record_Link **rrs, u8 *buf, u8 *cur)
             cur += 16;
             break;
         }
-        default: assert(!"ENCOUNTERED UNSUPPORTED RESOURCE RECORD TYPE");
+        default: {
+            fprintf(stderr, "error: encountered unsupported resource record type (%d)\n", rr->type);
+            cur += rr->rdlength;
+        }
     }
 
 
@@ -268,9 +275,9 @@ parse_resource_record(Resource_Record_Link **rrs, u8 *buf, u8 *cur)
 }
 
 internal DNS_Reply
-parse_reply(u8 *buf)
+parse_reply(String buf)
 {
-    u8 *cur = buf;
+    u8 *cur = buf.str;
     DNS_Reply reply = {0};
 
 
@@ -300,7 +307,7 @@ parse_reply(u8 *buf)
     {
         assert(reply.header.qdcount == 1);
 
-        reply.question.domain = parse_domain(buf, &cur);
+        cur += parse_domain(&reply.question.domain, buf, cur);
         DESERIALIZE_U16(reply.question.qtype);
         DESERIALIZE_U16(reply.question.qclass);
     }
@@ -336,8 +343,6 @@ parse_reply(u8 *buf)
 DNS_Reply
 recv_reply(int sockfd, struct sockaddr_in sa)
 {
-    // FIXME(ariel) Ensure cursor remains in buffer. In essence, prevent buffer
-    // overflows -- likely the best suited for the macros.
     socklen_t socklen = sizeof(sa);
     ssize_t len = recvfrom(sockfd, NULL, 0, MSG_TRUNC | MSG_PEEK, (struct sockaddr *)&sa, &socklen);
     if (len == -1) {
@@ -354,7 +359,7 @@ recv_reply(int sockfd, struct sockaddr_in sa)
         exit(1);
     }
 
-    return parse_reply(buf.str);
+    return parse_reply(buf);
 }
 
 Resource_Record *
