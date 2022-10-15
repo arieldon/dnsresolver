@@ -13,18 +13,15 @@
 #define SERIALIZE_U8(i) \
     do { \
         assert(sizeof(i) == sizeof(u8)); \
-        if (cur + sizeof(i) >= buf + UDP_MSG_LIMIT) abort(); \
         *cur++ = i; \
     } while (0);
 #define SERIALIZE_U16(i) \
     do { \
         assert(sizeof(i) == sizeof(u16)); \
-        if (cur + sizeof(i) >= buf + UDP_MSG_LIMIT) abort(); \
         *cur++ = i >> 8; *cur++ = i; \
     } while (0);
 #define SERIALIZE_STR(s) \
     do { \
-        if (cur + s.len >= buf + UDP_MSG_LIMIT) abort(); \
         memcpy(cur, s.str, s.len); \
         cur += label.len; \
     } while (0);
