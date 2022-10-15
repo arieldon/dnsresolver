@@ -11,7 +11,7 @@ Arena g_arena = {0};
 void
 arena_init(Arena *arena)
 {
-    void *buf = mmap(NULL, GB(4), PROT_NONE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+    u8 *buf = mmap(NULL, GB(4), PROT_NONE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
     if (buf == MAP_FAILED) abort();
     if (mprotect(buf, KB(8), PROT_READ | PROT_WRITE) == -1) abort();
 

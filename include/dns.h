@@ -1,6 +1,8 @@
 #ifndef DNS_H
 #define DNS_H
 
+#include <sys/socket.h>
+
 #include "common.h"
 #include "str.h"
 
@@ -14,12 +16,21 @@ enum {
     DNS_PORT         = 0x3500u,   // NOTE(ariel) Define standard DNS port in network byte order.
 };
 
+typedef enum { RR_CLASS_IN = 1 } RR_Class;
+
+typedef enum {
+    RR_TYPE_A     = 1,
+    RR_TYPE_NS    = 2,
+    RR_TYPE_AAAA  = 28,
+} RR_Type;
+
 typedef struct {
-    enum { IPv4, IPv6 } type;
-    union {
-        struct in_addr ipv4;
-        struct in6_addr ipv6;
-    } ip;
+    enum {
+        IPv4 = AF_INET,
+        IPv6 = AF_INET6,
+    } type;
+    socklen_t ipsize;
+    u8 ip[sizeof(struct sockaddr_in6)];
 } Address;
 
 typedef struct {
@@ -61,8 +72,8 @@ typedef struct {
 typedef DNS_Message DNS_Query;
 typedef DNS_Message DNS_Reply;
 
-void send_query(DNS_Query query, int sockfd, struct sockaddr_in sa);
-DNS_Reply recv_reply(int sockfd, struct sockaddr_in sa);
+void send_query(DNS_Query query, int sockfd, Address addr);
+DNS_Reply recv_reply(int sockfd, Address addr);
 
 Resource_Record *find_resource_record(Resource_Record_Link *rrs, String name);
 

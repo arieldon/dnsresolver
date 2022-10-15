@@ -56,15 +56,6 @@
     } while (0);
 
 
-typedef enum { RR_CLASS_IN = 1 } RR_Class;
-
-typedef enum {
-    RR_TYPE_A     = 1,
-    RR_TYPE_NS    = 2,
-    RR_TYPE_AAAA  = 28,
-} RR_Type;
-
-
 internal size_t
 format_query(DNS_Query query, u8 *buf)
 {
@@ -124,12 +115,12 @@ format_query(DNS_Query query, u8 *buf)
 }
 
 void
-send_query(DNS_Query query, int sockfd, struct sockaddr_in sa)
+send_query(DNS_Query query, int sockfd, Address addr)
 {
     u8 buf[UDP_MSG_LIMIT] = {0};
-
     size_t len = format_query(query, (u8 *)buf);
-    if (sendto(sockfd, buf, len, 0, (struct sockaddr *)&sa, sizeof(sa)) == -1) {
+    // FIXME(ariel) What happens if ipsize is too big, too small?
+    if (sendto(sockfd, buf, len, 0, (struct sockaddr *)addr.ip, addr.ipsize) == -1) {
         perror("sendto()");
         exit(1);
     }
@@ -159,7 +150,8 @@ parse_ipv6_addr(u8 *cur)
     String addr = { .len = INET6_ADDRSTRLEN };
     addr.str = arena_alloc(&g_arena, addr.len);
 
-    i32 len = snprintf((char *)addr.str, addr.len, "%x%x:%x%x:%x%x:%x%x:%x%x:%x%x:%x%x:%x%x",
+    i32 len = snprintf((char *)addr.str, addr.len,
+            "%02x%02x:%02x%02x:%02x%02x:%02x%02x:%02x%02x:%02x%02x:%02x%02x:%02x%02x",
             cur[0], cur[1], cur[2], cur[3], cur[4], cur[5], cur[6], cur[7],
             cur[8], cur[9], cur[10], cur[11], cur[12], cur[13], cur[14], cur[15]);
     if (len == -1) {
@@ -221,11 +213,18 @@ parse_resource_record(Resource_Record_Link **rrs, String buf, u8 *cur)
     Resource_Record_Link *link = arena_alloc(&g_arena, sizeof(Resource_Record));
     Resource_Record *rr = &link->rr;
 
-    DESERIALIZE_DOMAIN(rr->name);
-    DESERIALIZE_U16(rr->type);
-    DESERIALIZE_U16(rr->class); assert(rr->class == RR_CLASS_IN);
-    DESERIALIZE_I32(rr->ttl);
-    DESERIALIZE_U16(rr->rdlength);
+
+    /* ---
+     * Parse all fields of resource record barring rdata.
+     * ---
+     */
+    {
+        DESERIALIZE_DOMAIN(rr->name);
+        DESERIALIZE_U16(rr->type);
+        DESERIALIZE_U16(rr->class); assert(rr->class == RR_CLASS_IN);
+        DESERIALIZE_I32(rr->ttl);
+        DESERIALIZE_U16(rr->rdlength);
+    }
 
 
     /* ---
@@ -338,10 +337,11 @@ parse_reply(String buf)
 }
 
 DNS_Reply
-recv_reply(int sockfd, struct sockaddr_in sa)
+recv_reply(int sockfd, Address addr)
 {
-    socklen_t socklen = sizeof(sa);
-    ssize_t len = recvfrom(sockfd, NULL, 0, MSG_TRUNC | MSG_PEEK, (struct sockaddr *)&sa, &socklen);
+    // FIXME(ariel) What happens if ipsize is too big, too small?
+    ssize_t len = recvfrom(sockfd, 0, 0, MSG_TRUNC | MSG_PEEK, (struct sockaddr *)addr.ip,
+            &addr.ipsize);
     if (len == -1) {
         perror("recvfrom");
         exit(1);
@@ -351,7 +351,7 @@ recv_reply(int sockfd, struct sockaddr_in sa)
         .str = arena_alloc(&g_arena, len),
         .len = len,
     };
-    if (recvfrom(sockfd, buf.str, buf.len, 0, (struct sockaddr *)&sa, &socklen) == -1) {
+    if (recvfrom(sockfd, buf.str, buf.len, 0, (struct sockaddr *)addr.ip, &addr.ipsize) == -1) {
         perror("recvfrom()");
         exit(1);
     }
@@ -370,7 +370,8 @@ find_resource_record(Resource_Record_Link *rrs, String name)
         // TODO(ariel) Support IPv6 addresses. As far as I'm aware, they're
         // parsed properly, but the struct above `in_addr` doesn't support
         // IPv6. The API defines a separate type for IPv6 addresses.
-        if (rr->type == RR_TYPE_AAAA) goto next;
+        // NOTE(ariel) Skip IPv4 to smash IPv6 bug.
+        if (rr->type == RR_TYPE_A) goto next;
 
         if (string_cmp(rr->name, name)) return rr;
 next:   link = link->next;

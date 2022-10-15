@@ -6,7 +6,7 @@
 #include "common.h"
 
 typedef struct {
-    void *buf;
+    u8 *buf;
     size_t cap;
     size_t prev;
     size_t curr;

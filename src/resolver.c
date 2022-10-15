@@ -25,18 +25,20 @@ main(int argc, char *argv[])
 
     arena_init(&g_arena);
 
-    int sockfd = socket(AF_INET, SOCK_DGRAM, 0);
-    if (sockfd == -1) {
-        perror("socket()");
-        exit(1);
-    }
+    Address addr = { .type = IPv6 };
+    char *name_server = "2001:503:ba3e::2:30";
 
-    char *name_server = "198.41.0.4";
     for (;;) {
+        int sockfd = socket(addr.type, SOCK_DGRAM, 0);
+        if (sockfd == -1) {
+            perror("socket()");
+            exit(1);
+        }
+
         DNS_Query query = {
             .header = {
                 .id = rand(),
-                .flags = 0x0100,
+                .flags = 0x0100, // TODO(ariel) Create enum for flags.
                 .qdcount = 1,
             },
             .question = {
@@ -44,28 +46,40 @@ main(int argc, char *argv[])
                     .str = (u8 *)(*argv),
                     .len = strlen(*argv),
                 },
-                .qtype = 0x01,
-                .qclass = 0x01,
+                .qclass = RR_CLASS_IN,
             },
         };
 
-        // TODO(ariel) If `name_server` points to a IPv6 address, then use a
-        // different type. Basically, support IPv6 and maintain IPv4.
-        // Address addr = {0};
-        struct in_addr addr = {0};
-        if (inet_aton(name_server, &addr) == 0) {
-            perror("inet_aton()");
-            exit(1);
+        switch (addr.type) {
+            case IPv4: {
+                query.question.qtype = RR_TYPE_A;
+                addr.ipsize = sizeof(addr.ip);
+                struct sockaddr_in *sa = (struct sockaddr_in *)addr.ip;
+                sa->sin_family = AF_INET;
+                sa->sin_port = DNS_PORT;
+                if (inet_pton(IPv4, name_server, &sa->sin_addr) <= 0) {
+                    perror("inet_pton()");
+                    exit(1);
+                }
+                break;
+            }
+            case IPv6: {
+                query.question.qtype = RR_TYPE_AAAA;
+                addr.ipsize = sizeof(addr.ip);
+                struct sockaddr_in6 *sa = (struct sockaddr_in6 *)addr.ip;
+                sa->sin6_family = AF_INET6;
+                sa->sin6_port = DNS_PORT;
+                if (inet_pton(IPv6, name_server, &sa->sin6_addr) <= 0) {
+                    perror("inet_pton()");
+                    exit(1);
+                }
+                break;
+            }
+            default: assert(!"UNREACHABLE");
         }
-        struct sockaddr_in sa = {
-            .sin_family = AF_INET,
-            .sin_addr = addr,
-            .sin_port = DNS_PORT,
-        };
 
-        arena_clear(&g_arena);
-        send_query(query, sockfd, sa);
-        DNS_Reply reply = recv_reply(sockfd, sa);
+        send_query(query, sockfd, addr);
+        DNS_Reply reply = recv_reply(sockfd, addr);
 
         if (reply.header.ancount) {
             Resource_Record *rr = &reply.answer->rr;
@@ -86,6 +100,15 @@ main(int argc, char *argv[])
                 Resource_Record *rr = find_resource_record(reply.additional, domain);
                 if (rr) {
                     name_server = (char *)rr->rdata;
+                    switch (rr->type) {
+                        case RR_TYPE_A:
+                            addr.type = IPv4;
+                            break;
+                        case RR_TYPE_AAAA:
+                            addr.type = IPv6;
+                            break;
+                        default: assert(!"UNREACHABLE");
+                    }
                     no_match = false;
                     break;
                 }
@@ -95,8 +118,7 @@ main(int argc, char *argv[])
 
             if (no_match) {
                 // NOTE(ariel) The program failed to match a name server to an
-                // IP address.
-                assert(false);
+                // IP address -- failed to match NS to A record.
                 fprintf(stderr, "error: unable to resolve domain name\n");
                 goto exit;
             }
@@ -108,13 +130,11 @@ main(int argc, char *argv[])
             goto exit;
         }
 
-        // TODO(ariel) Check type of record set to `name_server` and set IPv4
-        // or IPv6 accordingly.
-        ;
+        close(sockfd);
+        arena_clear(&g_arena);
     }
 
 exit:
     arena_release(&g_arena);
-    close(sockfd);
     exit(0);
 }
