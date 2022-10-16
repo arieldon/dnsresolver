@@ -25,11 +25,11 @@ main(int argc, char *argv[])
 
     arena_init(&g_arena);
 
-    Address addr = { .type = IPv6 };
+    sockaddr_storage addr = { .ss_family = AF_INET6 };
     char *name_server = "2001:503:ba3e::2:30";
 
     for (;;) {
-        int sockfd = socket(addr.type, SOCK_DGRAM, 0);
+        int sockfd = socket(addr.ss_family, SOCK_DGRAM, 0);
         if (sockfd == -1) {
             perror("socket()");
             exit(1);
@@ -50,26 +50,24 @@ main(int argc, char *argv[])
             },
         };
 
-        switch (addr.type) {
-            case IPv4: {
+        switch (addr.ss_family) {
+            case AF_INET: {
                 query.question.qtype = RR_TYPE_A;
-                addr.ipsize = sizeof(addr.ip);
-                struct sockaddr_in *sa = (struct sockaddr_in *)addr.ip;
+                sockaddr_in *sa = (sockaddr_in *)&addr;
                 sa->sin_family = AF_INET;
                 sa->sin_port = DNS_PORT;
-                if (inet_pton(IPv4, name_server, &sa->sin_addr) <= 0) {
+                if (inet_pton(AF_INET, name_server, &sa->sin_addr) <= 0) {
                     perror("inet_pton()");
                     exit(1);
                 }
                 break;
             }
-            case IPv6: {
+            case AF_INET6: {
                 query.question.qtype = RR_TYPE_AAAA;
-                addr.ipsize = sizeof(addr.ip);
-                struct sockaddr_in6 *sa = (struct sockaddr_in6 *)addr.ip;
+                sockaddr_in6 *sa = (sockaddr_in6 *)&addr;
                 sa->sin6_family = AF_INET6;
                 sa->sin6_port = DNS_PORT;
-                if (inet_pton(IPv6, name_server, &sa->sin6_addr) <= 0) {
+                if (inet_pton(AF_INET6, name_server, &sa->sin6_addr) <= 0) {
                     perror("inet_pton()");
                     exit(1);
                 }
@@ -81,6 +79,7 @@ main(int argc, char *argv[])
         send_query(query, sockfd, addr);
         DNS_Reply reply = recv_reply(sockfd, addr);
 
+        // FIXME(ariel) Check authority flag rather than answer count.
         if (reply.header.ancount) {
             Resource_Record *rr = &reply.answer->rr;
             fprintf(stdout, "%.*s %.*s\n",
@@ -102,10 +101,10 @@ main(int argc, char *argv[])
                     name_server = (char *)rr->rdata;
                     switch (rr->type) {
                         case RR_TYPE_A:
-                            addr.type = IPv4;
+                            addr.ss_family = AF_INET;
                             break;
                         case RR_TYPE_AAAA:
-                            addr.type = IPv6;
+                            addr.ss_family = AF_INET6;
                             break;
                         default: assert(!"UNREACHABLE");
                     }

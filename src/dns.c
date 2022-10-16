@@ -115,12 +115,12 @@ format_query(DNS_Query query, u8 *buf)
 }
 
 void
-send_query(DNS_Query query, int sockfd, Address addr)
+send_query(DNS_Query query, int sockfd, sockaddr_storage addr)
 {
     u8 buf[UDP_MSG_LIMIT] = {0};
     size_t len = format_query(query, (u8 *)buf);
     // FIXME(ariel) What happens if ipsize is too big, too small?
-    if (sendto(sockfd, buf, len, 0, (struct sockaddr *)addr.ip, addr.ipsize) == -1) {
+    if (sendto(sockfd, buf, len, 0, (sockaddr *)&addr, sizeof(addr)) == -1) {
         perror("sendto()");
         exit(1);
     }
@@ -337,11 +337,10 @@ parse_reply(String buf)
 }
 
 DNS_Reply
-recv_reply(int sockfd, Address addr)
+recv_reply(int sockfd, sockaddr_storage addr)
 {
-    // FIXME(ariel) What happens if ipsize is too big, too small?
-    ssize_t len = recvfrom(sockfd, 0, 0, MSG_TRUNC | MSG_PEEK, (struct sockaddr *)addr.ip,
-            &addr.ipsize);
+    socklen_t socklen = sizeof(addr);
+    ssize_t len = recvfrom(sockfd, 0, 0, MSG_TRUNC | MSG_PEEK, (sockaddr *)&addr, &socklen);
     if (len == -1) {
         perror("recvfrom");
         exit(1);
@@ -351,7 +350,7 @@ recv_reply(int sockfd, Address addr)
         .str = arena_alloc(&g_arena, len),
         .len = len,
     };
-    if (recvfrom(sockfd, buf.str, buf.len, 0, (struct sockaddr *)addr.ip, &addr.ipsize) == -1) {
+    if (recvfrom(sockfd, buf.str, buf.len, 0, (sockaddr *)&addr, &socklen) == -1) {
         perror("recvfrom()");
         exit(1);
     }

@@ -6,6 +6,11 @@
 #include "common.h"
 #include "str.h"
 
+typedef struct sockaddr sockaddr;
+typedef struct sockaddr_in sockaddr_in;
+typedef struct sockaddr_in6 sockaddr_in6;
+typedef struct sockaddr_storage sockaddr_storage;
+
 enum {
     LABEL_SIZE_LIMIT = 64,
     NAME_SIZE_LIMIT  = 64,
@@ -23,15 +28,6 @@ typedef enum {
     RR_TYPE_NS    = 2,
     RR_TYPE_AAAA  = 28,
 } RR_Type;
-
-typedef struct {
-    enum {
-        IPv4 = AF_INET,
-        IPv6 = AF_INET6,
-    } type;
-    socklen_t ipsize;
-    u8 ip[sizeof(struct sockaddr_in6)];
-} Address;
 
 typedef struct {
     String name;
@@ -72,8 +68,8 @@ typedef struct {
 typedef DNS_Message DNS_Query;
 typedef DNS_Message DNS_Reply;
 
-void send_query(DNS_Query query, int sockfd, Address addr);
-DNS_Reply recv_reply(int sockfd, Address addr);
+void send_query(DNS_Query query, int sockfd, sockaddr_storage addr);
+DNS_Reply recv_reply(int sockfd, sockaddr_storage addr);
 
 Resource_Record *find_resource_record(Resource_Record_Link *rrs, String name);
 
