@@ -222,7 +222,7 @@ parse_resource_record(Resource_Record_Link **rrs, String buf, u8 *cur)
 {
     u8 *checkpoint = cur;
 
-    Resource_Record_Link *link = arena_alloc(&g_arena, sizeof(Resource_Record));
+    Resource_Record_Link *link = arena_alloc(&g_arena, sizeof(Resource_Record_Link));
     Resource_Record *rr = &link->rr;
 
 
