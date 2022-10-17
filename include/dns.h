@@ -90,6 +90,7 @@ typedef struct {
 typedef DNS_Message DNS_Query;
 typedef DNS_Message DNS_Reply;
 
+DNS_Query init_query(char *hostname, RR_Type type);
 void send_query(DNS_Query query, int sockfd, sockaddr_storage addr);
 DNS_Reply recv_reply(int sockfd, sockaddr_storage addr);
 

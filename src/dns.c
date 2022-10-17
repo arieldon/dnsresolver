@@ -69,6 +69,26 @@ char *RR_TYPE_STRING[] = {
 };
 
 
+DNS_Query
+init_query(char *hostname, RR_Type type)
+{
+    assert(type == RR_TYPE_A || type == RR_TYPE_AAAA);
+    return (DNS_Query){
+        .header = {
+            .id = rand(),
+            .qdcount = 1,
+        },
+        .question = {
+            .domain = {
+                .str = (u8 *)hostname,
+                .len = strlen(hostname),
+            },
+            .qtype = type,
+            .qclass = RR_CLASS_IN,
+        },
+    };
+}
+
 internal size_t
 format_query(DNS_Query query, u8 *buf)
 {

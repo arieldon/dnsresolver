@@ -21,6 +21,7 @@ int
 main(int argc, char *argv[])
 {
     char *program = *argv++;
+    char *hostname = *argv++;
     if (argc != 2) usage(program);
 
     arena_init(&g_arena);
@@ -34,21 +35,6 @@ main(int argc, char *argv[])
             perror("socket()");
             exit(1);
         }
-
-        DNS_Query query = {
-            .header = {
-                .id = rand(),
-                .flags = 0x0100, // TODO(ariel) Create enum for flags.
-                .qdcount = 1,
-            },
-            .question = {
-                .domain = {
-                    .str = (u8 *)(*argv),
-                    .len = strlen(*argv),
-                },
-                .qclass = RR_CLASS_IN,
-            },
-        };
 
         switch (addr.ss_family) {
             case AF_INET: {
@@ -76,6 +62,8 @@ main(int argc, char *argv[])
             default: assert(!"UNREACHABLE");
         }
 
+        DNS_Query query = init_query(hostname,
+            addr.ss_family == AF_INET ? RR_TYPE_A : RR_TYPE_AAAA);
         send_query(query, sockfd, addr);
         DNS_Reply reply = recv_reply(sockfd, addr);
 
