@@ -56,6 +56,19 @@
     } while (0);
 
 
+char *const ROOT_SERVER_A_IPv4 = "198.41.0.4";
+char *const ROOT_SERVER_A_IPv6 = "2001:503:ba3e::2:30";
+char *const ROOT_SERVER_E_IPv4 = "192.203.230.10";
+char *const ROOT_SERVER_E_IPv6 = "2001:500:a8::e";
+
+char *RR_TYPE_STRING[] = {
+    [RR_TYPE_A]     = "A",
+    [RR_TYPE_NS]    = "NS",
+    [RR_TYPE_CNAME] = "CNAME",
+    [RR_TYPE_AAAA]  = "AAAA",
+};
+
+
 internal size_t
 format_query(DNS_Query query, u8 *buf)
 {
@@ -119,7 +132,6 @@ send_query(DNS_Query query, int sockfd, sockaddr_storage addr)
 {
     u8 buf[UDP_MSG_LIMIT] = {0};
     size_t len = format_query(query, (u8 *)buf);
-    // FIXME(ariel) What happens if ipsize is too big, too small?
     if (sendto(sockfd, buf, len, 0, (sockaddr *)&addr, sizeof(addr)) == -1) {
         perror("sendto()");
         exit(1);

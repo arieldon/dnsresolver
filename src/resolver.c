@@ -25,8 +25,8 @@ main(int argc, char *argv[])
 
     arena_init(&g_arena);
 
-    sockaddr_storage addr = { .ss_family = AF_INET6 };
-    char *name_server = "2001:503:ba3e::2:30";
+    char *server = ROOT_SERVER_E_IPv4;
+    sockaddr_storage addr = { .ss_family = AF_INET };
 
     for (;;) {
         int sockfd = socket(addr.ss_family, SOCK_DGRAM, 0);
@@ -98,7 +98,7 @@ main(int argc, char *argv[])
 
                 Resource_Record *rr = find_resource_record(reply.additional, domain);
                 if (rr) {
-                    name_server = (char *)rr->rdata;
+                    server = (char *)rr->rdata;
                     switch (rr->type) {
                         case RR_TYPE_A:
                             addr.ss_family = AF_INET;

@@ -6,10 +6,18 @@
 #include "common.h"
 #include "str.h"
 
+
+extern char *const ROOT_SERVER_A_IPv4;
+extern char *const ROOT_SERVER_A_IPv6;
+extern char *const ROOT_SERVER_E_IPv4;
+extern char *const ROOT_SERVER_E_IPv6;
+
+
 typedef struct sockaddr sockaddr;
 typedef struct sockaddr_in sockaddr_in;
 typedef struct sockaddr_in6 sockaddr_in6;
 typedef struct sockaddr_storage sockaddr_storage;
+
 
 enum {
     LABEL_SIZE_LIMIT = 64,
