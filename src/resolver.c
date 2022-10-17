@@ -37,8 +37,7 @@ main(int argc, char *argv[])
         }
 
         encode_ip(server, &addr);
-        DNS_Query query = init_query(hostname,
-            addr.ss_family == AF_INET ? RR_TYPE_A : RR_TYPE_AAAA);
+        DNS_Query query = init_query(hostname, addr.ss_family);
         send_query(query, sockfd, addr);
         DNS_Reply reply = recv_reply(sockfd, addr);
 

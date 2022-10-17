@@ -93,7 +93,7 @@ typedef DNS_Message DNS_Reply;
 
 void encode_ip(char *ip, sockaddr_storage *addr);
 
-DNS_Query init_query(char *hostname, RR_Type type);
+DNS_Query init_query(char *hostname, int socktype);
 void send_query(DNS_Query query, int sockfd, sockaddr_storage addr);
 DNS_Reply recv_reply(int sockfd, sockaddr_storage addr);
 
