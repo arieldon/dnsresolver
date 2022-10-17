@@ -29,6 +29,17 @@ enum {
     DNS_PORT         = 0x3500u,   // NOTE(ariel) Define standard DNS port in network byte order.
 };
 
+typedef enum {
+    DNS_HEADER_FLAG_QR = 0x8000,
+    DNS_HEADER_MASK_OP = 0x7800,
+    DNS_HEADER_FLAG_AA = 0x0400,
+    DNS_HEADER_FLAG_TC = 0x0200,
+    DNS_HEADER_FLAG_RD = 0x0100,
+    DNS_HEADER_FLAG_RA = 0x0080,
+    DNS_HEADER_MASK_Z  = 0x0040,
+    DNS_HEADER_MASK_R  = 0x000F,
+} DNS_Header_Flags;
+
 typedef enum { RR_CLASS_IN = 1 } RR_Class;
 
 typedef enum {
@@ -37,6 +48,8 @@ typedef enum {
     RR_TYPE_CNAME  = 5,
     RR_TYPE_AAAA   = 28,
 } RR_Type;
+
+extern char *RR_TYPE_STRING[];
 
 typedef struct {
     String name;

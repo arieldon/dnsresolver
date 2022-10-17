@@ -79,12 +79,16 @@ main(int argc, char *argv[])
         send_query(query, sockfd, addr);
         DNS_Reply reply = recv_reply(sockfd, addr);
 
-        // FIXME(ariel) Check authority flag rather than answer count.
-        if (reply.header.ancount) {
-            Resource_Record *rr = &reply.answer->rr;
-            fprintf(stdout, "%.*s %.*s\n",
-                    (int)rr->name.len, rr->name.str,
-                    (int)rr->rdlength, rr->rdata);
+        if (reply.header.flags & DNS_HEADER_FLAG_AA) {
+            if (reply.header.ancount) {
+                Resource_Record *rr = &reply.answer->rr;
+                fprintf(stdout, "(%s) %.*s %.*s\n",
+                        RR_TYPE_STRING[rr->type],
+                        (int)rr->name.len, rr->name.str,
+                        (int)rr->rdlength, rr->rdata);
+            } else {
+                fprintf(stdout, "error: encountered authoritative reply without answer\n");
+            }
             goto exit;
         } else if (reply.header.nscount) {
             bool no_match = true;
