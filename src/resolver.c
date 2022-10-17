@@ -36,32 +36,7 @@ main(int argc, char *argv[])
             exit(1);
         }
 
-        switch (addr.ss_family) {
-            case AF_INET: {
-                query.question.qtype = RR_TYPE_A;
-                sockaddr_in *sa = (sockaddr_in *)&addr;
-                sa->sin_family = AF_INET;
-                sa->sin_port = DNS_PORT;
-                if (inet_pton(AF_INET, name_server, &sa->sin_addr) <= 0) {
-                    perror("inet_pton()");
-                    exit(1);
-                }
-                break;
-            }
-            case AF_INET6: {
-                query.question.qtype = RR_TYPE_AAAA;
-                sockaddr_in6 *sa = (sockaddr_in6 *)&addr;
-                sa->sin6_family = AF_INET6;
-                sa->sin6_port = DNS_PORT;
-                if (inet_pton(AF_INET6, name_server, &sa->sin6_addr) <= 0) {
-                    perror("inet_pton()");
-                    exit(1);
-                }
-                break;
-            }
-            default: assert(!"UNREACHABLE");
-        }
-
+        encode_ip(server, &addr);
         DNS_Query query = init_query(hostname,
             addr.ss_family == AF_INET ? RR_TYPE_A : RR_TYPE_AAAA);
         send_query(query, sockfd, addr);

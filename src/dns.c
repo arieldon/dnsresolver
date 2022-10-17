@@ -69,6 +69,34 @@ char *RR_TYPE_STRING[] = {
 };
 
 
+void
+encode_ip(char *ip, sockaddr_storage *addr)
+{
+    switch (addr->ss_family) {
+        case AF_INET: {
+            sockaddr_in *sa = (sockaddr_in *)addr;
+            sa->sin_family = AF_INET;
+            sa->sin_port = DNS_PORT;
+            if (inet_pton(AF_INET, ip, &sa->sin_addr) <= 0) {
+                perror("inet_pton()");
+                exit(1);
+            }
+            return;
+        }
+        case AF_INET6: {
+            sockaddr_in6 *sa = (sockaddr_in6 *)addr;
+            sa->sin6_family = AF_INET6;
+            sa->sin6_port = DNS_PORT;
+            if (inet_pton(AF_INET6, ip, &sa->sin6_addr) <= 0) {
+                perror("inet_pton()");
+                exit(1);
+            }
+            return;
+        }
+        default: assert(!"UNREACHABLE");
+    }
+}
+
 DNS_Query
 init_query(char *hostname, RR_Type type)
 {
