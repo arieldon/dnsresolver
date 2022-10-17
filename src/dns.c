@@ -433,15 +433,8 @@ find_resource_record(Resource_Record_Link *rrs, String name)
 
     while (link) {
         Resource_Record *rr = &link->rr;
-
-        // TODO(ariel) Support IPv6 addresses. As far as I'm aware, they're
-        // parsed properly, but the struct above `in_addr` doesn't support
-        // IPv6. The API defines a separate type for IPv6 addresses.
-        // NOTE(ariel) Skip IPv4 to smash IPv6 bug.
-        if (rr->type == RR_TYPE_A) goto next;
-
         if (string_cmp(rr->name, name)) return rr;
-next:   link = link->next;
+        link = link->next;
     }
 
     return 0;
