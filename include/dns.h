@@ -32,9 +32,10 @@ enum {
 typedef enum { RR_CLASS_IN = 1 } RR_Class;
 
 typedef enum {
-    RR_TYPE_A     = 1,
-    RR_TYPE_NS    = 2,
-    RR_TYPE_AAAA  = 28,
+    RR_TYPE_A      = 1,
+    RR_TYPE_NS     = 2,
+    RR_TYPE_CNAME  = 5,
+    RR_TYPE_AAAA   = 28,
 } RR_Type;
 
 typedef struct {

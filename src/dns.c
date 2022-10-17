@@ -241,8 +241,6 @@ parse_resource_record(Resource_Record_Link **rrs, String buf, u8 *cur)
 
     /* ---
      * Parse rdata field.
-     *
-     * TODO(ariel) Parse CNAME resource records.
      * ---
      */
     switch (rr->type) {
@@ -261,6 +259,13 @@ parse_resource_record(Resource_Record_Link **rrs, String buf, u8 *cur)
             rr->rdata = name.str;
             break;
         }
+        case RR_TYPE_CNAME: {
+            String canon = {0};
+            cur += parse_domain(&canon, buf, cur);
+            rr->rdlength = canon.len;
+            rr->rdata = canon.str;
+            break;
+        }
         case RR_TYPE_AAAA: {
             assert(rr->rdlength == 16);
             String addr = parse_ipv6_addr(cur);
@@ -270,14 +275,17 @@ parse_resource_record(Resource_Record_Link **rrs, String buf, u8 *cur)
             break;
         }
         default: {
-            fprintf(stderr, "error: encountered unsupported resource record type (%d)\n", rr->type);
+            rr->rdata = arena_alloc(&g_arena, rr->rdlength);
+            memcpy(rr->rdata, cur, rr->rdlength);
             cur += rr->rdlength;
+            break;
         }
     }
 
 
     link->next = *rrs;
     *rrs = link;
+
 
     return cur - checkpoint;
 }
