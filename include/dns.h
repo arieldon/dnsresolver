@@ -66,6 +66,13 @@ typedef struct Resource_Record_Link {
 } Resource_Record_Link;
 
 typedef struct {
+    Resource_Record_Link *A;
+    Resource_Record_Link *NS;
+    Resource_Record_Link *CNAME;
+    Resource_Record_Link *AAAA;
+} Resource_Record_List;
+
+typedef struct {
     u16 id;
     u16 flags;
     u16 qdcount;
@@ -83,9 +90,9 @@ typedef struct {
 typedef struct {
     DNS_Header header;
     DNS_Question question;
-    Resource_Record_Link *answer;
-    Resource_Record_Link *authority;
-    Resource_Record_Link *additional;
+    Resource_Record_List answer;
+    Resource_Record_List authority;
+    Resource_Record_List additional;
 } DNS_Message;
 typedef DNS_Message DNS_Query;
 typedef DNS_Message DNS_Reply;
@@ -93,10 +100,10 @@ typedef DNS_Message DNS_Reply;
 
 void encode_ip(char *ip, sockaddr_storage *addr);
 
-DNS_Query init_query(char *hostname, int socktype);
+DNS_Query init_query(String hostname, int socktype);
 void send_query(DNS_Query query, int sockfd, sockaddr_storage addr);
 DNS_Reply recv_reply(int sockfd, sockaddr_storage addr);
 
-Resource_Record *find_resource_record(Resource_Record_Link *rrs, String name);
+Resource_Record *find_resource_record(Resource_Record_List rs, String name);
 
 #endif

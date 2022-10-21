@@ -13,6 +13,7 @@ typedef struct {
 
 bool string_cmp(String s, String t);
 String string_dup(String s);
+char *string_term(String s);
 
 
 typedef struct String_Node {

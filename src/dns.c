@@ -98,7 +98,7 @@ encode_ip(char *ip, sockaddr_storage *addr)
 }
 
 DNS_Query
-init_query(char *hostname, int socktype)
+init_query(String hostname, int socktype)
 {
     assert(socktype == AF_INET || socktype == AF_INET6);
     return (DNS_Query){
@@ -107,10 +107,7 @@ init_query(char *hostname, int socktype)
             .qdcount = 1,
         },
         .question = {
-            .domain = {
-                .str = (u8 *)hostname,
-                .len = strlen(hostname),
-            },
+            .domain = hostname,
             .qtype = socktype == AF_INET ? RR_TYPE_A : RR_TYPE_AAAA,
             .qclass = RR_CLASS_IN,
         },
@@ -245,6 +242,7 @@ parse_domain(String *domain, String buf, u8 *cur)
             DESERIALIZE_U16(offset);
             offset &= ~(pointer_mask << 8);
 
+            // FIXME(ariel) Write an informative error message.
             // NOTE(ariel) Ensure cursor remains within bounds.
             if (cur < buf.str || cur > buf.str + buf.len) abort();
 
@@ -266,7 +264,7 @@ parse_domain(String *domain, String buf, u8 *cur)
 }
 
 internal size_t
-parse_resource_record(Resource_Record_Link **rrs, String buf, u8 *cur)
+parse_resource_record(Resource_Record_List *rs, String buf, u8 *cur)
 {
     u8 *checkpoint = cur;
 
@@ -298,6 +296,9 @@ parse_resource_record(Resource_Record_Link **rrs, String buf, u8 *cur)
             rr->rdlength = addr.len;
             rr->rdata = addr.str;
             cur += 4;
+
+            link->next = rs->A;
+            rs->A = link;
             break;
         }
         case RR_TYPE_NS: {
@@ -305,6 +306,9 @@ parse_resource_record(Resource_Record_Link **rrs, String buf, u8 *cur)
             cur += parse_domain(&name, buf, cur);
             rr->rdlength = name.len;
             rr->rdata = name.str;
+
+            link->next = rs->NS;
+            rs->NS = link;
             break;
         }
         case RR_TYPE_CNAME: {
@@ -312,27 +316,28 @@ parse_resource_record(Resource_Record_Link **rrs, String buf, u8 *cur)
             cur += parse_domain(&canon, buf, cur);
             rr->rdlength = canon.len;
             rr->rdata = canon.str;
+
+            link->next = rs->CNAME;
+            rs->CNAME = link;
             break;
         }
         case RR_TYPE_AAAA: {
             assert(rr->rdlength == 16);
+
             String addr = parse_ipv6_addr(cur);
             rr->rdlength = addr.len;
             rr->rdata = addr.str;
             cur += 16;
+
+            link->next = rs->AAAA;
+            rs->AAAA = link;
             break;
         }
         default: {
-            rr->rdata = arena_alloc(&g_arena, rr->rdlength);
-            memcpy(rr->rdata, cur, rr->rdlength);
             cur += rr->rdlength;
             break;
         }
     }
-
-
-    link->next = *rrs;
-    *rrs = link;
 
 
     return cur - checkpoint;
@@ -427,10 +432,18 @@ recv_reply(int sockfd, sockaddr_storage addr)
 }
 
 Resource_Record *
-find_resource_record(Resource_Record_Link *rrs, String name)
+find_resource_record(Resource_Record_List rs, String name)
 {
-    Resource_Record_Link *link = rrs;
+    Resource_Record_Link *link = 0;
 
+    link = rs.A;
+    while (link) {
+        Resource_Record *rr = &link->rr;
+        if (string_cmp(rr->name, name)) return rr;
+        link = link->next;
+    }
+
+    link = rs.AAAA;
     while (link) {
         Resource_Record *rr = &link->rr;
         if (string_cmp(rr->name, name)) return rr;

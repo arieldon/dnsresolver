@@ -23,6 +23,17 @@ string_dup(String s)
     return t;
 }
 
+char *
+string_term(String s)
+{
+    char *t = arena_alloc(&g_arena, s.len + 1);
+
+    memcpy(t, s.str, s.len);
+    t[s.len] = 0;
+
+    return t;
+}
+
 void
 push_string_node(String_List *ls, String_Node *n)
 {

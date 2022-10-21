@@ -1,3 +1,5 @@
+#include <errno.h>
+#include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -17,89 +19,134 @@ usage(char *program)
     exit(1);
 }
 
-int
-main(int argc, char *argv[])
+internal void
+err_exit(char *fmt, ...)
 {
-    char *program = *argv++;
-    char *hostname = *argv++;
-    if (argc != 2) usage(program);
+    // NOTE(ariel) Assume this functions runs directly after previous failed
+    // function. If this assumption holds, it's safe to copy `errno` and call
+    // the following IO functions.
+    int errcode = errno;
 
-    arena_init(&g_arena);
+    va_list ap;
+    va_start(ap, fmt);
 
-    char *server = ROOT_SERVER_E_IPv4;
+    fprintf(stderr, "error: ");
+    vfprintf(stderr, fmt, ap);
+
+    if (errcode) fprintf(stderr, "(%s)\n", strerror(errcode));
+    else fprintf(stderr, "\n");
+
+    va_end(ap);
+    exit(1);
+}
+
+internal DNS_Reply
+query(char *server, sockaddr_storage addr, String hostname)
+{
+    int sockfd = socket(addr.ss_family, SOCK_DGRAM, 0);
+    if (sockfd == -1) err_exit("failed to open socket");
+
+    encode_ip(server, &addr);
+
+    send_query(init_query(hostname, addr.ss_family), sockfd, addr);
+    DNS_Reply reply = recv_reply(sockfd, addr);
+
+    close(sockfd);
+    return reply;
+}
+
+internal Resource_Record_List
+resolve(String domain)
+{
+    char *ip = ROOT_SERVER_A_IPv4;
     sockaddr_storage addr = { .ss_family = AF_INET };
 
     for (;;) {
-        int sockfd = socket(addr.ss_family, SOCK_DGRAM, 0);
-        if (sockfd == -1) {
-            perror("socket()");
-            exit(1);
-        }
-
-        encode_ip(server, &addr);
-        DNS_Query query = init_query(hostname, addr.ss_family);
-        send_query(query, sockfd, addr);
-        DNS_Reply reply = recv_reply(sockfd, addr);
+        Arena_Checkpoint cp = arena_checkpoint_set(&g_arena);
+        DNS_Reply reply = query(ip, addr, domain);
 
         if (reply.header.flags & DNS_HEADER_FLAG_AA) {
-            if (reply.header.ancount) {
-                Resource_Record *rr = &reply.answer->rr;
-                fprintf(stdout, "(%s) %.*s %.*s\n",
-                        RR_TYPE_STRING[rr->type],
-                        (int)rr->name.len, rr->name.str,
-                        (int)rr->rdlength, rr->rdata);
-            } else {
-                fprintf(stdout, "error: encountered authoritative reply without answer\n");
-            }
-            goto exit;
+            return reply.answer;
         } else if (reply.header.nscount) {
-            bool no_match = true;
-            Resource_Record_Link *link = reply.authority;
+            Resource_Record_Link *link = reply.authority.NS;
 
             while (link) {
-                String domain = {
+                String rr_domain = {
                     .str = link->rr.rdata,
                     .len = link->rr.rdlength,
                 };
 
-                Resource_Record *rr = find_resource_record(reply.additional, domain);
+                // NOTE(ariel) Match resource record from authority section to
+                // record from additional section to map domain name to IP
+                // address.
+                Resource_Record *rr = find_resource_record(reply.additional, rr_domain);
                 if (rr) {
-                    server = (char *)rr->rdata;
-                    switch (rr->type) {
-                        case RR_TYPE_A:
-                            addr.ss_family = AF_INET;
-                            break;
-                        case RR_TYPE_AAAA:
-                            addr.ss_family = AF_INET6;
-                            break;
-                        default: assert(!"UNREACHABLE");
-                    }
-                    no_match = false;
+                    assert(rr->type == RR_TYPE_A || rr->type == RR_TYPE_AAAA);
+                    addr.ss_family = rr->type == RR_TYPE_A ? AF_INET : AF_INET6;
+                    ip = (char *)rr->rdata;
                     break;
                 }
 
                 link = link->next;
             }
 
-            if (no_match) {
-                // NOTE(ariel) The program failed to match a name server to an
-                // IP address -- failed to match NS to A record.
-                fprintf(stderr, "error: unable to resolve domain name\n");
-                goto exit;
+            // NOTE(ariel) If no match exists between NS and A, query the name
+            // server using its domain or hostname.
+            if (!link) {
+                if (reply.authority.NS) {
+                    Resource_Record *rr = &reply.authority.NS->rr;
+                    String nameserver_domain = {
+                        .str = rr->rdata,
+                        .len = rr->rdlength,
+                    };
+                    Resource_Record_List nameserver = resolve(nameserver_domain);
+                    if (nameserver.A) {
+                        Resource_Record *rr = &nameserver.A->rr;
+                        ip = string_term((String){ .str = rr->rdata, .len = rr->rdlength });
+                    } else if (nameserver.AAAA) {
+                        Resource_Record *rr = &nameserver.A->rr;
+                        ip = string_term((String){ .str = rr->rdata, .len = rr->rdlength });
+                    } else err_exit("unable to resolve domain name");
+                } else err_exit("unable to resolve domain name");
             }
-        } else {
-            // NOTE(ariel) The program received a reply that it failed to gain
-            // anything useful from, like the domain name of a TLD server or an
-            // IP of some sort.
-            fprintf(stderr, "error: unable to resolve domain name\n");
-            goto exit;
-        }
+        } else err_exit("unable to resolve domain name");
 
-        close(sockfd);
-        arena_clear(&g_arena);
+        arena_checkpoint_restore(cp);
     }
+}
 
-exit:
+internal void
+output_address(Resource_Record_List rs)
+{
+    if (rs.A) {
+        Resource_Record *rr = &rs.A->rr;
+        fprintf(stdout, "(%s) %.*s %.*s\n",
+                RR_TYPE_STRING[rr->type],
+                (int)rr->name.len, rr->name.str,
+                (int)rr->rdlength, rr->rdata);
+    } else if (rs.AAAA) {
+        Resource_Record *rr = &rs.AAAA->rr;
+        fprintf(stdout, "(%s) %.*s %.*s\n",
+                RR_TYPE_STRING[rr->type],
+                (int)rr->name.len, rr->name.str,
+                (int)rr->rdlength, rr->rdata);
+    } else err_exit("unable to map hostname to IP address");
+}
+
+int
+main(int argc, char *argv[])
+{
+    char *program = *argv++;
+    if (argc != 2) usage(program);
+
+    arena_init(&g_arena);
+
+    String domain = {
+        .str = (u8 *)*argv,
+        .len = strlen(*argv),
+    };
+    output_address(resolve(domain));
+
     arena_release(&g_arena);
     exit(0);
 }

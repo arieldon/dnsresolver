@@ -24,7 +24,7 @@ arena_init(Arena *arena)
 void
 arena_release(Arena *arena)
 {
-    arena->curr = arena->prev = 0;
+    arena_clear(arena);
     (void)munmap(arena->buf, arena->cap);
 }
 
