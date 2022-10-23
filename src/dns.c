@@ -7,6 +7,7 @@
 #include "arena.h"
 #include "common.h"
 #include "dns.h"
+#include "err_exit.h"
 #include "str.h"
 
 
@@ -69,6 +70,29 @@ char *RR_TYPE_STRING[] = {
 };
 
 
+internal inline void
+check_addr_valid(int res)
+{
+    if (res == 0)
+        err_exit("attempted to convert invalid address from string to network address structure");
+    else if (res < 0)
+        err_exit("attempted to convert an invalid address family to network address structure");
+}
+
+internal void
+transform_ipv4_addr(char *ip, sockaddr_in *addr)
+{
+    int res = inet_pton(AF_INET, ip, &addr->sin_addr);
+    check_addr_valid(res);
+}
+
+internal void
+transform_ipv6_addr(char *ip, sockaddr_in6 *addr)
+{
+    int res = inet_pton(AF_INET6, ip, &addr->sin6_addr);
+    check_addr_valid(res);
+}
+
 void
 encode_ip(char *ip, sockaddr_storage *addr)
 {
@@ -77,20 +101,14 @@ encode_ip(char *ip, sockaddr_storage *addr)
             sockaddr_in *sa = (sockaddr_in *)addr;
             sa->sin_family = AF_INET;
             sa->sin_port = DNS_PORT;
-            if (inet_pton(AF_INET, ip, &sa->sin_addr) <= 0) {
-                perror("inet_pton()");
-                exit(1);
-            }
+            transform_ipv4_addr(ip, sa);
             return;
         }
         case AF_INET6: {
             sockaddr_in6 *sa = (sockaddr_in6 *)addr;
             sa->sin6_family = AF_INET6;
             sa->sin6_port = DNS_PORT;
-            if (inet_pton(AF_INET6, ip, &sa->sin6_addr) <= 0) {
-                perror("inet_pton()");
-                exit(1);
-            }
+            transform_ipv6_addr(ip, sa);
             return;
         }
         default: assert(!"UNREACHABLE");
@@ -177,10 +195,8 @@ send_query(DNS_Query query, int sockfd, sockaddr_storage addr)
 {
     u8 buf[UDP_MSG_LIMIT] = {0};
     size_t len = format_query(query, (u8 *)buf);
-    if (sendto(sockfd, buf, len, 0, (sockaddr *)&addr, sizeof(addr)) == -1) {
-        perror("sendto()");
-        exit(1);
-    }
+    if (sendto(sockfd, buf, len, 0, (sockaddr *)&addr, sizeof(addr)) == -1)
+        err_exit("failed to send DNS query");
 }
 
 internal String
@@ -190,10 +206,7 @@ parse_ipv4_addr(u8 *cur)
     addr.str = arena_alloc(&g_arena, addr.len);
 
     i32 len = snprintf((char *)addr.str, addr.len, "%d.%d.%d.%d", cur[0], cur[1], cur[2], cur[3]);
-    if (len == -1) {
-        perror("snprintf()");
-        exit(1);
-    }
+    if (len == -1) err_exit("failed to parse IPv4 address");
     assert((u32)len <= addr.len);
     addr.str = arena_realloc(&g_arena, len);
     addr.len = len;
@@ -211,10 +224,7 @@ parse_ipv6_addr(u8 *cur)
             "%02x%02x:%02x%02x:%02x%02x:%02x%02x:%02x%02x:%02x%02x:%02x%02x:%02x%02x",
             cur[0], cur[1], cur[2], cur[3], cur[4], cur[5], cur[6], cur[7],
             cur[8], cur[9], cur[10], cur[11], cur[12], cur[13], cur[14], cur[15]);
-    if (len == -1) {
-        perror("snprintf()");
-        exit(1);
-    }
+    if (len == -1) err_exit("failed to parse IPv6 address");
     assert((u32)len <= addr.len);
     addr.str = arena_realloc(&g_arena, len);
     addr.len = len;
@@ -414,19 +424,14 @@ recv_reply(int sockfd, sockaddr_storage addr)
 {
     socklen_t socklen = sizeof(addr);
     ssize_t len = recvfrom(sockfd, 0, 0, MSG_TRUNC | MSG_PEEK, (sockaddr *)&addr, &socklen);
-    if (len == -1) {
-        perror("recvfrom");
-        exit(1);
-    }
+    if (len == -1) err_exit("failed to read length of received message");
 
     String buf = {
         .str = arena_alloc(&g_arena, len),
         .len = len,
     };
-    if (recvfrom(sockfd, buf.str, buf.len, 0, (sockaddr *)&addr, &socklen) == -1) {
-        perror("recvfrom()");
-        exit(1);
-    }
+    if (recvfrom(sockfd, buf.str, buf.len, 0, (sockaddr *)&addr, &socklen) == -1)
+        err_exit("failed to read received message");
 
     return parse_reply(buf);
 }
