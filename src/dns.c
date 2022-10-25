@@ -4,6 +4,7 @@
 
 #include <arpa/inet.h>
 #include <sys/socket.h>
+#include <sys/time.h>
 #include <unistd.h>
 
 #include "arena.h"
@@ -443,6 +444,10 @@ query(char *server, sockaddr_storage addr, String hostname)
 {
     int sockfd = socket(addr.ss_family, SOCK_DGRAM, 0);
     if (sockfd == -1) err_exit("failed to open socket");
+
+    struct timeval timeout = { .tv_sec = 1 };
+    if (setsockopt(sockfd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout)) == -1)
+        err_exit("failed to set timeout option for socket");
 
     encode_ip(server, &addr);
 
