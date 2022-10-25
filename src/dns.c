@@ -254,9 +254,9 @@ parse_domain(String *domain, String buf, u8 *cur)
             DESERIALIZE_U16(offset);
             offset &= ~(pointer_mask << 8);
 
-            // FIXME(ariel) Write an informative error message.
             // NOTE(ariel) Ensure cursor remains within bounds.
-            if (cur < buf.str || cur > buf.str + buf.len) abort();
+            if (cur < buf.str || cur > buf.str + buf.len)
+                err_exit("DNS label contains pointer to outside the bounds of the message");
 
             (void)parse_domain(domain, buf, buf.str + offset);
             push_string(&labels, *domain);
@@ -519,6 +519,9 @@ resolve(String domain)
                         .str = rr->rdata,
                         .len = rr->rdlength,
                     };
+
+                    // NOTE(ariel) Recursively resolve IP from hostname of some
+                    // nameserver to then query it.
                     Resource_Record_List nameserver = resolve(nameserver_domain);
                     if (nameserver.A) {
                         Resource_Record *rr = &nameserver.A->rr;
@@ -526,10 +529,10 @@ resolve(String domain)
                     } else if (nameserver.AAAA) {
                         Resource_Record *rr = &nameserver.A->rr;
                         ip = string_term((String){ .str = rr->rdata, .len = rr->rdlength });
-                    } else err_exit("unable to resolve domain name");
-                } else err_exit("unable to resolve domain name");
+                    } else err_exit("unable to recursively resolve domain name of nameserver");
+                } else err_exit("DNS reply does not contain expected NS record");
             }
-        } else err_exit("unable to resolve domain name");
+        } else err_exit("DNS reply does not contain any NS records");
 
         arena_checkpoint_restore(cp);
     }
