@@ -7,12 +7,6 @@
 #include "str.h"
 
 
-extern char *const ROOT_SERVER_A_IPv4;
-extern char *const ROOT_SERVER_A_IPv6;
-extern char *const ROOT_SERVER_E_IPv4;
-extern char *const ROOT_SERVER_E_IPv6;
-
-
 typedef struct sockaddr sockaddr;
 typedef struct sockaddr_in sockaddr_in;
 typedef struct sockaddr_in6 sockaddr_in6;
@@ -98,12 +92,7 @@ typedef DNS_Message DNS_Query;
 typedef DNS_Message DNS_Reply;
 
 
-void encode_ip(char *ip, sockaddr_storage *addr);
-
-DNS_Query init_query(String hostname, int socktype);
-void send_query(DNS_Query query, int sockfd, sockaddr_storage addr);
-DNS_Reply recv_reply(int sockfd, sockaddr_storage addr);
-
-Resource_Record *find_resource_record(Resource_Record_List rs, String name);
+Resource_Record_List resolve(String domain);
+void output_address(Resource_Record_List rs);
 
 #endif
