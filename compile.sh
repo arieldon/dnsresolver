@@ -13,4 +13,4 @@ else
     FLAGS="$FLAGS $RELEASE"
 fi
 
-gcc "$FLAGS" -Iinclude/ src/* -o dnsresolver
+gcc $FLAGS -Iinclude/ src/* -o dnsresolver
