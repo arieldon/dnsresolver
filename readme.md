@@ -26,3 +26,4 @@ To build the program, simply run the script `compile.sh`, optionally pass
 - [Beej's Guide to Network Programming](https://beej.us/guide/bgnet/)
 - [Computer Networking: A Top-Down Approach](https://gaia.cs.umass.edu/kurose_ross/online_lectures.htm)
 - [Ryan Fleury on Arena Allocators](https://www.rfleury.com/p/untangling-lifetimes-the-arena-allocator)
+- [Ginger Bill on Memory Management](https://www.gingerbill.org/series/memory-allocation-strategies/)
